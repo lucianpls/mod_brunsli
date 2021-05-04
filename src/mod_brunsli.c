@@ -26,8 +26,7 @@ static apr_status_t compress_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 
 static apr_status_t debrun_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 {
-    return DecodeBrunsli(0, NULL, NULL, NULL);
-//	return APR_SUCCESS;
+    return APR_SUCCESS;
 }
 
 static const command_rec cmds[] = {
