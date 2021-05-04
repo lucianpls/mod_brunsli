@@ -10,7 +10,8 @@
 
 #include <httpd.h>
 #include <http_core.h>
-#include <apr_strings.h>
+
+#include <brunsli/decode.h>
 
 extern module AP_MODULE_DECLARE_DATA brunsli_module;
 
@@ -20,16 +21,17 @@ APLOG_USE_MODULE(brunsli);
 
 static apr_status_t compress_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 {
-	return APR_SUCCESS;
+    return APR_SUCCESS;
 }
 
 static apr_status_t debrun_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 {
-	return APR_SUCCESS;
+    return DecodeBrunsli(0, NULL, NULL, NULL);
+//	return APR_SUCCESS;
 }
 
 static const command_rec cmds[] = {
-	{NULL}
+    {NULL}
 };
 
 static const char BDName[] = "BRUNSLI_DECOMPRESS";
@@ -38,15 +40,16 @@ static const char BDName[] = "BRUNSLI_DECOMPRESS";
 
 static void register_hooks(apr_pool_t *p) {
 //	ap_register_output_filter("BRUNSLI_COMPRESS", compress_filter, NULL, AP_FTYPE_CONTENT_SET);
-	ap_register_output_filter_protocol(BDName, debrun_filter, NULL, AP_FTYPE_CONTENT_SET, DEC_PROTO_FLAGS);
+
+    ap_register_output_filter_protocol(BDName, debrun_filter, NULL, AP_FTYPE_CONTENT_SET, DEC_PROTO_FLAGS);
 }
 
 module AP_MODULE_DECLARE_DATA brunsli_module = {
-	STANDARD20_MODULE_STUFF,
-	0,
-	0,
-	0,
-	0,
-	cmds,
-	register_hooks
+    STANDARD20_MODULE_STUFF,
+    0,
+    0,
+    0,
+    0,
+    cmds,
+    register_hooks
 };
