@@ -3,7 +3,7 @@
 A brunsli to JPEG convertor output filter
 
 [Brunsli][] is a fast lossless JPEG recompressor that is included in the
-[committee draft of the JPEG XL standard][CD]. This Apache HTTPD module allows serving standard JPEGs from precompressed Brunsli files, saving about 20% of the JPEG storage space.
+[committee draft of the JPEG XL standard][CD]. This Apache HTTPD module allows serving legacy JPEGs from recompressed Brunsli files, saving about 20% of the JPEG storage space.
 
 [Brunsli]: https://github.com/google/brunsli
 [CD]: https://arxiv.org/abs/1908.03565
