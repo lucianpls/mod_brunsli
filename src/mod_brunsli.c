@@ -61,7 +61,8 @@ static apr_status_t debrun_filter(ap_filter_t* f, apr_bucket_brigade* bb)
     }
 
     // Avoid making a copy if the whole input is in the first bucket
-    // but we need to keep it from being cleaned
+    // buff is already set up
+    // need to keep that first bucket from being cleaned
     if (len == bytes) {
         APR_BUCKET_REMOVE(first);
     }
@@ -72,6 +73,7 @@ static apr_status_t debrun_filter(ap_filter_t* f, apr_bucket_brigade* bb)
     apr_brigade_cleanup(bb); // Reuse the brigade
 
     apr_table_unset(f->r->headers_out, "Content-Length");
+    apr_table_unset(f->r->headers_out, "Content-Type");
     if (!DecodeBrunsli(len, buff, bb, out_fun))
         return HTTP_INTERNAL_SERVER_ERROR;
     if (first)
@@ -79,8 +81,10 @@ static apr_status_t debrun_filter(ap_filter_t* f, apr_bucket_brigade* bb)
     APR_BRIGADE_INSERT_TAIL(bb, apr_bucket_eos_create(f->c->bucket_alloc));
     state = apr_brigade_length(bb, 1, &len);
     // something is really wrong if that call fails
-    if (APR_SUCCESS == state)
+    if (APR_SUCCESS == state) {
+        ap_set_content_type(f->r, "image/jpeg");
         ap_set_content_length(f->r, len);
+    }
     return ap_pass_brigade(f->next, bb);
 }
 
