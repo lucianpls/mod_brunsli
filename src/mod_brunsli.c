@@ -29,15 +29,10 @@ static apr_status_t compress_filter(ap_filter_t* f, apr_bucket_brigade* bb)
     return APR_SUCCESS;
 }
 
-typedef struct {
-    apr_bucket_brigade* outbb;
-    ap_filter_t* f;
-} debrun_ctx;
-
-
 // Get a chunk of data from DEBRUN, place a copy in the output brigade
-static size_t out_fun(debrun_ctx* ctx, const uint8_t* data, size_t size) {
-    ap_fwrite(ctx->f->next, ctx->outbb, data, size);
+static size_t out_fun(apr_bucket_brigade *bb, const uint8_t* data, size_t size) {
+    APR_BRIGADE_INSERT_TAIL(bb, 
+        apr_bucket_heap_create(data, size, NULL, bb->bucket_alloc));
     return size;
 }
 
@@ -65,29 +60,39 @@ static apr_status_t debrun_filter(ap_filter_t* f, apr_bucket_brigade* bb)
         return ap_pass_brigade(f->next, bb);
     }
 
-    apr_brigade_pflatten(bb, &buff, &bytes, f->r->pool);
-    apr_brigade_cleanup(bb);
-    debrun_ctx* ctx = apr_pcalloc(f->r->pool, sizeof(debrun_ctx));
-    f->ctx = ctx;
-    ctx->outbb = apr_brigade_create(f->r->pool, f->c->bucket_alloc);
-    ctx->f = f;
+    // Avoid making a copy if the whole input is in the first bucket
+    // but we need to keep it from being cleaned
+    if (len == bytes) {
+        APR_BUCKET_REMOVE(first);
+    }
+    else {
+        apr_brigade_pflatten(bb, &buff, &bytes, f->r->pool);
+        first = NULL;
+    }
+    apr_brigade_cleanup(bb); // Reuse the brigade
+
     apr_table_unset(f->r->headers_out, "Content-Length");
-    DecodeBrunsli(len, buff, ctx, out_fun);
-    APR_BRIGADE_INSERT_TAIL(ctx->outbb, apr_bucket_eos_create(f->c->bucket_alloc));
-    return ap_pass_brigade(f->next, ctx->outbb);
+    if (!DecodeBrunsli(len, buff, bb, out_fun))
+        return HTTP_INTERNAL_SERVER_ERROR;
+    if (first)
+        apr_bucket_free(first);
+    APR_BRIGADE_INSERT_TAIL(bb, apr_bucket_eos_create(f->c->bucket_alloc));
+    state = apr_brigade_length(bb, 1, &len);
+    // something is really wrong if that call fails
+    if (APR_SUCCESS == state)
+        ap_set_content_length(f->r, len);
+    return ap_pass_brigade(f->next, bb);
 }
 
 static const command_rec cmds[] = {
     {NULL}
 };
 
-static const char BDName[] = "BRUNSLI_DECOMPRESS";
+static const char BDName[] = "DBRUNSLI";
 
 #define DEC_PROTO_FLAGS  AP_FILTER_PROTO_CHANGE | AP_FILTER_PROTO_CHANGE_LENGTH | AP_FILTER_PROTO_NO_BYTERANGE
 
 static void register_hooks(apr_pool_t *p) {
-//	ap_register_output_filter("BRUNSLI_COMPRESS", compress_filter, NULL, AP_FTYPE_CONTENT_SET);
-
     ap_register_output_filter_protocol(BDName, debrun_filter, NULL, AP_FTYPE_CONTENT_SET, DEC_PROTO_FLAGS);
 }
 
