@@ -43,7 +43,7 @@ static apr_status_t debrun_filter(ap_filter_t* f, apr_bucket_brigade* bb)
     apr_size_t bytes;
     apr_bucket* first = APR_BRIGADE_FIRST(bb);
     if (!first) return APR_SUCCESS; // empty brigade
-    int state = apr_bucket_read(first, &buff, &bytes, APR_BLOCK_READ);
+    int state = apr_bucket_read(first, (const char **)&buff, &bytes, APR_BLOCK_READ);
     static const char SIG[] = { 0x0a, 0x04, 0x42, 0xd2, 0xd5, 0x4e };
     if (APR_SUCCESS != state || bytes < 6 || memcmp(buff, SIG, sizeof(SIG))) {
         ap_remove_output_filter(f);
@@ -74,7 +74,7 @@ static apr_status_t debrun_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 
     apr_table_unset(f->r->headers_out, "Content-Length");
     apr_table_unset(f->r->headers_out, "Content-Type");
-    if (!DecodeBrunsli(len, buff, bb, out_fun))
+    if (!DecodeBrunsli(len, buff, bb, (DecodeBrunsliSink)out_fun))
         return HTTP_INTERNAL_SERVER_ERROR;
     if (first)
         apr_bucket_free(first);
