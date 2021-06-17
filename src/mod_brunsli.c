@@ -14,36 +14,87 @@
 #include <http_protocol.h>
 
 #include <brunsli/decode.h>
+#include <brunsli/encode.h>
 
-// Maximum size of brunsli input, output jpeg will be larger
+// Maximum size of input, output may be larger
 #define MAX_SZ 1024*1024
+// Mime type to use for brunsli
+static const char BRUNSLI_MIME_TYPE[] = "image/x-j";
 
-extern module AP_MODULE_DECLARE_DATA brunsli_module;
-
-#if defined(APLOG_USE_MODULE)
 APLOG_USE_MODULE(brunsli);
-#endif
 
-static apr_status_t compress_filter(ap_filter_t* f, apr_bucket_brigade* bb)
-{
-    return APR_SUCCESS;
-}
-
-// Get a chunk of data from DEBRUN, place a copy in the output brigade
-static size_t out_fun(apr_bucket_brigade *bb, const uint8_t* data, size_t size) {
-    APR_BRIGADE_INSERT_TAIL(bb, 
+// Callback function for both encoding and decoding
+static size_t out_fun(void* pbb, const uint8_t* data, size_t size) {
+    apr_bucket_brigade* bb = (apr_bucket_brigade*)(pbb);
+    APR_BRIGADE_INSERT_TAIL(bb,
         apr_bucket_heap_create(data, size, NULL, bb->bucket_alloc));
     return size;
 }
 
-static apr_status_t debrun_filter(ap_filter_t* f, apr_bucket_brigade* bb)
+static apr_status_t benc_filter(ap_filter_t* f, apr_bucket_brigade* bb)
+{
+    char* buff;
+    apr_size_t bytes;
+    apr_bucket* first = APR_BRIGADE_FIRST(bb);
+    if (!first) return APR_SUCCESS; // empty brigade
+    int state = apr_bucket_read(first, &buff, &bytes, APR_BLOCK_READ);
+    static const char JPEG_SIG[] = {0xff, 0xd8, 0xff, 0xe0};
+    static const char JPEG1_SIG[] = {0xff, 0xd8, 0xff, 0xe1};
+    if (APR_SUCCESS != state || bytes < 4 ||
+        memcmp(buff, JPEG_SIG, sizeof(JPEG_SIG)) ||
+        memcmp(buff, JPEG1_SIG, sizeof(JPEG_SIG))) {
+        ap_remove_output_filter(f);
+        return ap_pass_brigade(f->next, bb);
+    }
+
+    // Look like jpeg content
+    apr_off_t len;
+    state = apr_brigade_length(bb, 1, &len);
+    if (APR_SUCCESS != state || len < 0 || len > MAX_SZ) {
+        ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, f->r, "Can't read jpeg input");
+        ap_remove_output_filter(f);
+        return ap_pass_brigade(f->next, bb);
+    }
+
+    if (len == bytes) { // Single bucket
+        APR_BUCKET_REMOVE(first);
+    }
+    else {
+        apr_brigade_pflatten(bb, &buff, &bytes, f->r->pool);
+        first = NULL;
+    }
+    apr_brigade_cleanup(bb); // Reuse brigade
+
+    apr_table_unset(f->r->headers_out, "Content-Length");
+    apr_table_unset(f->r->headers_out, "Content-Type");
+    if (!EncodeBrunsli(len, buff, bb, out_fun)) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, f->r, "Encoding error, possibly input is not supported");
+        return HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    if (first)
+        apr_bucket_free(first);
+    APR_BRIGADE_INSERT_TAIL(bb, apr_bucket_eos_create(f->c->bucket_alloc));
+    state = apr_brigade_length(bb, 1, &len);
+    // something is really wrong if the call above fails
+    if (APR_SUCCESS == state) {
+        ap_set_content_type(f->r, BRUNSLI_MIME_TYPE);
+        ap_set_content_length(f->r, len);
+    }
+    else {
+        ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, f->r, "Error getting size of brunsli output");
+    }
+    return ap_pass_brigade(f->next, bb);
+}
+
+static apr_status_t bdec_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 {
     // Read some data, look for brunsli signature
     char* buff;
     apr_size_t bytes;
     apr_bucket* first = APR_BRIGADE_FIRST(bb);
     if (!first) return APR_SUCCESS; // empty brigade
-    int state = apr_bucket_read(first, (const char **)&buff, &bytes, APR_BLOCK_READ);
+    int state = apr_bucket_read(first, &buff, &bytes, APR_BLOCK_READ);
     static const char SIG[] = { 0x0a, 0x04, 0x42, 0xd2, 0xd5, 0x4e };
     if (APR_SUCCESS != state || bytes < 6 || memcmp(buff, SIG, sizeof(SIG))) {
         ap_remove_output_filter(f);
@@ -55,7 +106,7 @@ static apr_status_t debrun_filter(ap_filter_t* f, apr_bucket_brigade* bb)
     //  Returns -1 if it fails
     state = apr_brigade_length(bb, 1, &len);
     if (APR_SUCCESS != state || len > MAX_SZ || len < 0) {
-        ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, f->r, "Brunsli input too large");
+        ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, f->r, "Can't read brunsli input or input too large");
         ap_remove_output_filter(f);
         return ap_pass_brigade(f->next, bb);
     }
@@ -74,8 +125,10 @@ static apr_status_t debrun_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 
     apr_table_unset(f->r->headers_out, "Content-Length");
     apr_table_unset(f->r->headers_out, "Content-Type");
-    if (!DecodeBrunsli(len, buff, bb, (DecodeBrunsliSink)out_fun))
+    if (!DecodeBrunsli(len, buff, bb, out_fun)) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, f->r, "Decoding error");
         return HTTP_INTERNAL_SERVER_ERROR;
+    }
     if (first)
         apr_bucket_free(first);
     APR_BRIGADE_INSERT_TAIL(bb, apr_bucket_eos_create(f->c->bucket_alloc));
@@ -93,11 +146,13 @@ static const command_rec cmds[] = {
 };
 
 static const char BDName[] = "DBRUNSLI";
+static const char BEName[] = "EBRUNSLI";
 
 #define DEC_PROTO_FLAGS  AP_FILTER_PROTO_CHANGE | AP_FILTER_PROTO_CHANGE_LENGTH | AP_FILTER_PROTO_NO_BYTERANGE
 
 static void register_hooks(apr_pool_t *p) {
-    ap_register_output_filter_protocol(BDName, debrun_filter, NULL, AP_FTYPE_CONTENT_SET, DEC_PROTO_FLAGS);
+    ap_register_output_filter_protocol(BDName, bdec_filter, NULL, AP_FTYPE_CONTENT_SET, DEC_PROTO_FLAGS);
+    ap_register_output_filter_protocol(BEName, benc_filter, NULL, AP_FTYPE_CONTENT_SET, DEC_PROTO_FLAGS);
 }
 
 module AP_MODULE_DECLARE_DATA brunsli_module = {

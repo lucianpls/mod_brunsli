@@ -62,7 +62,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>libhttpd.lib;libapr.lib;brunslidec-c.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libhttpd.lib;libapr.lib;brunslidec-c.lib;brunslienc-c.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalOptions>/EXPORT:brunsli_module,@1</AdditionalOptions>
     </Link>
     <PostBuildEvent>
