@@ -33,7 +33,7 @@ static size_t out_fun(void* pbb, const uint8_t* data, size_t size) {
 
 static apr_status_t benc_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 {
-    char* buff;
+    const char* buff;
     apr_size_t bytes;
     apr_bucket* first = APR_BRIGADE_FIRST(bb);
     if (!first) return APR_SUCCESS; // empty brigade
@@ -67,7 +67,7 @@ static apr_status_t benc_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 
     apr_table_unset(f->r->headers_out, "Content-Length");
     apr_table_unset(f->r->headers_out, "Content-Type");
-    if (!EncodeBrunsli((size_t)len, (unsigned char *)buff, bb, out_fun)) {
+    if (!EncodeBrunsli((size_t)len, (const unsigned char *)buff, bb, out_fun)) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, f->r, "Encoding error, possibly input is not supported");
         return HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -125,7 +125,7 @@ static apr_status_t bdec_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 
     apr_table_unset(f->r->headers_out, "Content-Length");
     apr_table_unset(f->r->headers_out, "Content-Type");
-    if (!DecodeBrunsli(len, buff, bb, out_fun)) {
+    if (!DecodeBrunsli(len, (const unsigned char *)buff, bb, out_fun)) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, f->r, "Decoding error");
         return HTTP_INTERNAL_SERVER_ERROR;
     }
