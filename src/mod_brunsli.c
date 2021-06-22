@@ -33,7 +33,7 @@ static size_t out_fun(void* pbb, const uint8_t* data, size_t size) {
 
 static apr_status_t benc_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 {
-    const char* buff;
+    char* buff;
     apr_size_t bytes;
     apr_bucket* first = APR_BRIGADE_FIRST(bb);
     if (!first) return APR_SUCCESS; // empty brigade
