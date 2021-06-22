@@ -27,7 +27,7 @@ APLOG_USE_MODULE(brunsli);
 static size_t out_fun(void* pbb, const uint8_t* data, size_t size) {
     apr_bucket_brigade* bb = (apr_bucket_brigade*)(pbb);
     APR_BRIGADE_INSERT_TAIL(bb,
-        apr_bucket_heap_create(data, size, NULL, bb->bucket_alloc));
+        apr_bucket_heap_create((const char *)data, size, NULL, bb->bucket_alloc));
     return size;
 }
 
@@ -67,7 +67,7 @@ static apr_status_t benc_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 
     apr_table_unset(f->r->headers_out, "Content-Length");
     apr_table_unset(f->r->headers_out, "Content-Type");
-    if (!EncodeBrunsli(len, buff, bb, out_fun)) {
+    if (!EncodeBrunsli((size_t)len, (unsigned char *)buff, bb, out_fun)) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, f->r, "Encoding error, possibly input is not supported");
         return HTTP_INTERNAL_SERVER_ERROR;
     }
