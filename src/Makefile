@@ -1,11 +1,18 @@
-APXS = apxs
-LIBS += -lbrunslidec-c
+include Makefile.lcl
 
-default: mod_brunsli.so
+INCLUDES += -I $(PREFIX)/include
+LIBDIR = $(PREFIX)/lib
+LIBS = -lbrunslidec-c -lbrunslienc-c
 
-mod_brunsli.so: mod_brunsli.c
-	$(APXS) -c $(INCLUDES) $(LIBS) $^
+TARGET = .libs/mod_brunsli.so
+
+default: $(TARGET)
+
+$(TARGET)	: mod_brunsli.c
+	$(APXS) -c $(INCLUDES) -L $(LIBDIR) $(LIBS) $<
 
 clean:
 	$(RM) -r mod_brunsli.lo mod_brunsli.la mod_brunsli.slo .libs
 
+install: $(TARGET)
+	$(SUDO) $(CP) $< $(DEST)

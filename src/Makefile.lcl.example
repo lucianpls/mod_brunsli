@@ -1,0 +1,6 @@
+APXS = apxs
+CP = cp
+PREFIX := $(if $(PREFIX), $(PREFIX), $(HOME))
+
+# SUDO = sudo
+DEST=/etc/httpd/modules

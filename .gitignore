@@ -1,6 +1,9 @@
 # Prerequisites
 *.d
 
+# Local files
+*.lcl 
+
 # Compiled Object files
 *.slo
 *.lo
