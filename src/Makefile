@@ -1,4 +1,5 @@
-include Makefile.lcl
+MAKEOPT ?= Makefile.lcl
+include $MAKEOPT
 
 INCLUDES += -I $(PREFIX)/include
 LIBDIR = $(PREFIX)/lib
