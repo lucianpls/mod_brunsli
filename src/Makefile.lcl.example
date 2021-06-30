@@ -3,4 +3,4 @@ CP = cp
 PREFIX ?= $(HOME)
 
 # SUDO = sudo
-DEST = $PREFIX/modules
+DEST = $(PREFIX)/modules
