@@ -8,7 +8,7 @@ A brunsli - JPEG convertor output filter
 [Brunsli]: https://github.com/google/brunsli
 [CD]: https://arxiv.org/abs/1908.03565
 
-As an Apache HTTPD output filter named "DBRUNSLI", it can be enabled using [SetOutputFilter directive](https://httpd.apache.org/docs/2.4/mod/mod_mime.html#setoutputfilter) or using [mod_filter](https://httpd.apache.org/docs/2.4/mod/mod_filter.html).  
+As an Apache HTTPD output filter named "DBRUNSLI", it can be enabled using [SetOutputFilter directive](http://httpd.apache.org/docs/current/mod/core.html#setoutputfilter) or using [mod_filter](https://httpd.apache.org/docs/2.4/mod/mod_filter.html).  
 When enabled, DBRUNSLI filter activates when it detects brunsli content, converts it back to the original JPEG and sends that JPEG to the user.
 A second filter named "EBRUNSLI" is available, generating brunsli formatted output from a JFIF input. The mime type used for brunsli formatted 
 output is `image/x-j`.
