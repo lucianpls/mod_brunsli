@@ -31,6 +31,20 @@ static size_t out_fun(void* pbb, const uint8_t* data, size_t size) {
     return size;
 }
 
+//
+//  Only for use in the debugger, to inspect a table
+// Place breakpoint here and call: inspect_table(f->r->headers_out)
+//
+#if defined(_DEBUG)
+static void inspect_table(apr_table_t * tbl) {
+    const apr_array_header_t * pthdr = apr_table_elts(tbl);
+    for (int i = 0; i < pthdr->nelts; i++) {
+        apr_table_entry_t val = APR_ARRAY_IDX(pthdr, i, apr_table_entry_t);
+        const char * key = val.key;
+    }
+}
+#endif
+
 static apr_status_t benc_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 {
     char* buff;
@@ -41,8 +55,8 @@ static apr_status_t benc_filter(ap_filter_t* f, apr_bucket_brigade* bb)
     static const char JPEG_SIG[] = {0xff, 0xd8, 0xff, 0xe0};
     static const char JPEG1_SIG[] = {0xff, 0xd8, 0xff, 0xe1};
     if (APR_SUCCESS != state || bytes < 4 ||
-        memcmp(buff, JPEG_SIG, sizeof(JPEG_SIG)) ||
-        memcmp(buff, JPEG1_SIG, sizeof(JPEG_SIG))) {
+        (memcmp(buff, JPEG_SIG, sizeof(JPEG_SIG)) && memcmp(buff, JPEG1_SIG, sizeof(JPEG_SIG)))) 
+    {
         ap_remove_output_filter(f);
         return ap_pass_brigade(f->next, bb);
     }
@@ -65,6 +79,8 @@ static apr_status_t benc_filter(ap_filter_t* f, apr_bucket_brigade* bb)
     }
     apr_brigade_cleanup(bb); // Reuse brigade
 
+//    inspect_table(f->r->headers_out);
+//    const char *ETG = apr_table_get(f->r->headers_out, "ETag");
     apr_table_unset(f->r->headers_out, "Content-Length");
     apr_table_unset(f->r->headers_out, "Content-Type");
     if (!EncodeBrunsli((size_t)len, (const unsigned char *)buff, bb, out_fun)) {
@@ -101,10 +117,13 @@ static apr_status_t bdec_filter(ap_filter_t* f, apr_bucket_brigade* bb)
         return ap_pass_brigade(f->next, bb);
     }
 
+//    inspect_table(f->r->headers_out);
+
     // Looks like brunsli content, is is small enough
     apr_off_t len;
     //  Returns -1 if it fails
     state = apr_brigade_length(bb, 1, &len);
+//    const char tg = apr_table_get(f->r->headers_out, "ETag");
     if (APR_SUCCESS != state || len > MAX_SZ || len < 0) {
         ap_log_rerror(APLOG_MARK, APLOG_WARNING, 0, f->r, "Can't read brunsli input or input too large");
         ap_remove_output_filter(f);
@@ -113,9 +132,8 @@ static apr_status_t bdec_filter(ap_filter_t* f, apr_bucket_brigade* bb)
 
     // Avoid making a copy if the whole input is in the first bucket
     // buff is already set up
-    // need to keep that first bucket from being cleaned
     if (len == bytes) {
-        APR_BUCKET_REMOVE(first);
+        APR_BUCKET_REMOVE(first); // Keep this buffer when cleaning up the brigade
     }
     else {
         apr_brigade_pflatten(bb, &buff, &bytes, f->r->pool);
@@ -123,15 +141,15 @@ static apr_status_t bdec_filter(ap_filter_t* f, apr_bucket_brigade* bb)
     }
     apr_brigade_cleanup(bb); // Reuse the brigade
 
-    apr_table_unset(f->r->headers_out, "Content-Length");
-    apr_table_unset(f->r->headers_out, "Content-Type");
     if (!DecodeBrunsli(len, (const unsigned char *)buff, bb, out_fun)) {
         ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, f->r, "Decoding error");
         return HTTP_INTERNAL_SERVER_ERROR;
     }
-    if (first)
+    if (first) // Free the input bucket if we saved it until now
         apr_bucket_free(first);
     APR_BRIGADE_INSERT_TAIL(bb, apr_bucket_eos_create(f->c->bucket_alloc));
+    apr_table_unset(f->r->headers_out, "Content-Length");
+    apr_table_unset(f->r->headers_out, "Content-Type");
     state = apr_brigade_length(bb, 1, &len);
     // something is really wrong if that call fails
     if (APR_SUCCESS == state) {
@@ -145,14 +163,14 @@ static const command_rec cmds[] = {
     {NULL}
 };
 
-static const char BDName[] = "DBRUNSLI";
-static const char BEName[] = "EBRUNSLI";
+static const char CBName[] = "CBRUNSLI";
+static const char DBName[] = "DBRUNSLI";
 
 #define DEC_PROTO_FLAGS  AP_FILTER_PROTO_CHANGE | AP_FILTER_PROTO_CHANGE_LENGTH | AP_FILTER_PROTO_NO_BYTERANGE
 
 static void register_hooks(apr_pool_t *p) {
-    ap_register_output_filter_protocol(BDName, bdec_filter, NULL, AP_FTYPE_CONTENT_SET, DEC_PROTO_FLAGS);
-    ap_register_output_filter_protocol(BEName, benc_filter, NULL, AP_FTYPE_CONTENT_SET, DEC_PROTO_FLAGS);
+    ap_register_output_filter_protocol(DBName, bdec_filter, NULL, AP_FTYPE_CONTENT_SET, DEC_PROTO_FLAGS);
+    ap_register_output_filter_protocol(CBName, benc_filter, NULL, AP_FTYPE_CONTENT_SET, DEC_PROTO_FLAGS);
 }
 
 module AP_MODULE_DECLARE_DATA brunsli_module = {
