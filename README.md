@@ -1,6 +1,6 @@
 # mod_brunsli
 
-An Apache HTTPD brunsli - JPEG convertor output filter
+An Apache HTTPD brunsli <-> JPEG conversion filter
 
 [Brunsli][] is a fast lossless JPEG recompressor that is included in the
 [committee draft of the JPEG XL standard][CD]. This Apache HTTPD module allows serving legacy JFIF JPEG from 
